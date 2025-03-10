@@ -183,6 +183,24 @@ fn execute_filter(
             sender.exclude_time(exec_ctx.baseline_metrics().elapsed_compute());
 
             while let Some(batch) = input.next().await.transpose()? {
+                // 记录输入批次的行数
+                let input_rows = batch.num_rows();
+                log::debug!("Input batch has {} rows", input_rows);
+
+                // 过滤批次
+                let filtered_batch = cached_exprs_evaluator.filter(&batch)?;
+
+                // 记录过滤后的行数
+                let filtered_rows = filtered_batch.num_rows();
+                log::debug!("Filtered batch has {} rows", filtered_rows);
+
+                // 记录过滤条件是否满足
+                if filtered_rows == 0 {
+                    log::info!("No rows matched the filter conditions");
+                } else {
+                    log::info!("{} rows matched the filter conditions", filtered_rows);
+                }
+
                 let _timer = exec_ctx.baseline_metrics().elapsed_compute().timer();
                 let filtered_batch = cached_exprs_evaluator.filter(&batch)?;
                 exec_ctx
