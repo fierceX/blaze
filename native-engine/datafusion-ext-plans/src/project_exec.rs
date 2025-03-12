@@ -184,6 +184,10 @@ fn execute_project_with_filtering(
     filters: Vec<PhysicalExprRef>,
     exprs: Vec<PhysicalExprRef>,
 ) -> Result<SendableRecordBatchStream> {
+
+    // 记录初始的过滤条件和投影表达式
+    log::info!("Initial filters: {:?}", filters);
+    log::info!("Initial projection expressions: {:?}", exprs);
     // execute input with pruning
     let num_exprs = exprs.len();
     let (pruned_exprs, projection) = prune_columns(&[exprs, filters].concat())?;
@@ -197,6 +201,10 @@ fn execute_project_with_filtering(
         .skip(num_exprs)
         .cloned()
         .collect::<Vec<PhysicalExprRef>>();
+
+    // 记录裁剪后的过滤条件和投影表达式
+    log::info!("Pruned filters: {:?}", filters);
+    log::info!("Pruned projection expressions: {:?}", exprs);
 
     let cached_expr_evaluator = Arc::new(CachedExprsEvaluator::try_new(
         filters,
@@ -217,7 +225,22 @@ fn execute_project_with_filtering(
                 .await
                 .transpose()?
             {
+                // 记录输入批次的行数
+                let input_rows = batch.num_rows();
+                log::info!("Input batch has {} rows", input_rows);
+
+                // 执行过滤和投影
                 let output_batch = cached_expr_evaluator.filter_project(&batch)?;
+
+                // 记录输出批次的行数
+                let output_rows = output_batch.num_rows();
+                log::info!("Output batch has {} rows", output_rows);
+
+                // 如果过滤后没有数据，记录警告
+                if output_rows == 0 {
+                    log::info!("No rows matched the filter conditions in this batch");
+                }
+
                 drop(batch);
 
                 exec_ctx
